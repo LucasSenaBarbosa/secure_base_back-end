@@ -1,0 +1,815 @@
+openapi: 3.1.0
+info:
+  title: SecureBase API
+  version: 0.1.0
+  summary: API Python do SecureBase
+  description: |
+    API do SecureBase com autenticação própria e dados no PostgreSQL do Supabase.
+
+    ## Roteiro de autenticação para desenvolvimento
+
+    1. Garanta que `/health/ready` responda `200`.
+    2. Crie a conta com `POST /api/v1/auth/register`, enviando `email`, `password`
+       (8–128 caracteres) e `name`. Uma conta nova responde `201 Created`.
+       E-mail já cadastrado responde `409 Conflict`; use uma mensagem de usuário
+       adequada sem repetir a senha ou dados sensíveis.
+    3. Faça login em `POST /api/v1/auth/login` com `email` e `password`. A resposta
+       `200` contém access JWT válido por 15 minutos e define cookies de sessão
+       `HttpOnly` e CSRF; o refresh token não é retornado no JSON.
+    4. Envie o token nas rotas protegidas no cabeçalho
+       `Authorization: Bearer <access_token>`. O token é um JWT próprio da API;
+       não use a chave de serviço do Supabase como token de usuário.
+    5. Quando o access token expirar, o cliente usa
+       `POST /api/v1/auth/refresh` com o cookie de refresh e `X-CSRF-Token`;
+       o token é rotacionado. A sessão expira 30 dias após o login.
+    6. Use `POST /api/v1/auth/logout` para revogar a sessão. Senha alterada,
+       conta removida, sessão revogada ou expiração exige novo login.
+    7. Envie `Idempotency-Key` (UUID aleatório) em cadastro, criação de
+       residência e associação de membro. Reutilize a chave somente para a
+       mesma operação; respostas concluídas são reproduzidas por 24 horas.
+
+    Exemplo para testar em um ambiente local:
+
+    ```bash
+    curl -X POST http://127.0.0.1:8000/api/v1/auth/register \
+      -H "Content-Type: application/json" \
+      -H "Idempotency-Key: 827f17a0-cd52-4f4d-892d-7fc5da620000" \
+      -d '{"email":"dev@example.com","password":"senha-segura","name":"Dev"}'
+
+    curl -X POST http://127.0.0.1:8000/api/v1/auth/login \
+      -H "Content-Type: application/json" \
+      -d '{"email":"dev@example.com","password":"senha-segura"}'
+
+    curl http://127.0.0.1:8000/api/v1/auth/me \
+      -H "Authorization: Bearer <access_token>"
+    ```
+
+    Erros usam `application/problem+json` (RFC 9457), com extensões `code` e
+    `traceId`; validações incluem também `fields`. O OpenAPI documenta respostas
+    `422` nesse formato e uma resposta `default` Problem para cada operação.
+    Erros HTTP automáticos de rota ou método inexistente também usam o mesmo
+    contrato (`NOT_FOUND` e `METHOD_NOT_ALLOWED`).
+
+    Para rotas protegidas, use o JWT emitido pela API no login. No Swagger UI,
+    clique em **Authorize** e informe somente o token, sem escrever `Bearer`.
+
+    O Supabase Auth não é usado. Senhas com hash scrypt e contas ficam na tabela
+    securebase_users. O cadastro não confirma o e-mail e não depende de SMTP.
+  contact:
+    name: Equipe SecureBase
+servers:
+  - url: http://127.0.0.1:8000
+    description: Backend local
+tags:
+  - name: health
+    description: Verificações operacionais públicas
+  - name: auth
+    description: Cadastro, login e perfil da sessão
+  - name: homes
+    description: Residências e associação de usuários
+  - name: users
+    description: Administração global de contas (perfil master)
+paths:
+  /health/live:
+    get:
+      tags: [health]
+      operationId: getHealthLive
+      summary: Verifica se o processo está ativo
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Processo ativo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              example:
+                status: ok
+  /health/ready:
+    get:
+      tags: [health]
+      operationId: getHealthReady
+      summary: Verifica se o banco de contas está pronto
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Dependências prontas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+              example:
+                status: ok
+        "503":
+          description: Banco de dados indisponível
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+              example:
+                type: urn:securebase:problem:database-unavailable
+                title: Banco de dados indisponível
+                status: 503
+                detail: O banco de dados ou o schema necessário não está pronto.
+                instance: /health/ready
+                code: DATABASE_UNAVAILABLE
+                traceId: 00000000-0000-4000-8000-000000000000
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Retorna o perfil da sessão autenticada
+      security:
+        - bearerAuth: []
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Perfil autenticado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                email: pessoa@example.com
+                name: Pessoa SecureBase
+                role: member
+        "401":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      operationId: loginWithEmailAndPassword
+      summary: Inicia sessão usando e-mail e senha
+      description: |
+        Rota pública. A API valida a senha armazenada como hash scrypt e emite
+        um JWT HS256 próprio, válido por 15 minutos. Define também o refresh
+        token opaco em cookie HttpOnly e o cookie CSRF legível pelo cliente.
+        Respostas de falha não revelam se a conta existe. O access token pode
+        ser usado em **Authorize** para testar rotas protegidas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: pessoa@example.com
+              password: senha-de-teste
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Sessão autenticada emitida pela API SecureBase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+          headers:
+            Set-Cookie:
+              description: Cookies HttpOnly de refresh e CSRF separados.
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      operationId: registerWithEmailAndPassword
+      summary: Cria conta sem confirmação de e-mail
+      description: |
+        Rota pública. A API armazena somente hash scrypt da senha e cria a conta
+        como `member`. O login fica disponível imediatamente; o endereço de
+        e-mail não é confirmado. O status `201` indica uma nova conta, `200`
+        ativa um registro legado sem senha e `409` indica e-mail já cadastrado.
+        Como o status `409` revela a existência da conta, o cliente deve evitar
+        exibir detalhes desnecessários na interface pública. Requer
+        `Idempotency-Key`; respostas concluídas são reproduzidas por 24 horas.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              email: pessoa@example.com
+              password: senha-segura
+              name: Pessoa SecureBase
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "201":
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "200":
+          description: Registro legado sem senha ativado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Rotaciona refresh token e emite novo access token
+      description: |
+        Requer o cookie HttpOnly `securebase-refresh`, o cookie
+        `securebase-csrf` e o mesmo valor no cabeçalho `X-CSRF-Token`. A sessão
+        expira 30 dias após o login; refresh não estende esse limite absoluto.
+      parameters:
+        - name: securebase-refresh
+          in: cookie
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Access token renovado e refresh token rotacionado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logoutSession
+      summary: Revoga a sessão e remove os cookies de autenticação
+      parameters:
+        - name: securebase-refresh
+          in: cookie
+          required: false
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfTokenOptional"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "204":
+          description: Sessão revogada e cookies removidos
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/auth/me/password:
+    patch:
+      tags: [auth]
+      operationId: changePassword
+      summary: Altera a senha da conta autenticada
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeRequest"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "204":
+          description: Senha atualizada; a sessão anterior foi invalidada
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/homes:
+    get:
+      tags: [homes]
+      operationId: listHomes
+      summary: Lista as residências acessíveis à conta
+      description: Usuários veem casas das quais são primary ou membros; master vê todas.
+      security:
+        - bearerAuth: []
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Residências e papel efetivo da conta em cada uma
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HomeProfile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [homes]
+      operationId: createHome
+      summary: Cria uma residência e associa o criador como primary
+      description: Requer `Idempotency-Key`; resposta reproduzida por 24 horas.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHome"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "201":
+          description: Residência criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeProfile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/homes/{home_id}/users:
+    get:
+      tags: [homes]
+      operationId: listHomeUsers
+      summary: Lista os usuários associados à residência
+      description: Exige que o ator seja primary daquela residência ou master.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/HomeId"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Usuários associados, com seus papéis nesta residência
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+    post:
+      tags: [homes]
+      operationId: addHomeMember
+      summary: Associa uma conta existente à residência
+      description: |
+        Exige que o ator seja primary daquela residência ou master. A pessoa
+        precisa criar a conta antes de ser associada; uma conta pode pertencer
+        a várias casas. Requer `Idempotency-Key`; resposta reproduzida por 24 horas.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/HomeId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddHomeMember"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "201":
+          description: Conta existente associada à residência
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/homes/{home_id}/users/{user_id}:
+    delete:
+      tags: [homes]
+      operationId: removeHomeUser
+      summary: Remove o acesso do usuário a uma residência
+      description: |
+        Exige primary daquela residência ou master. Remove apenas a associação
+        desta casa; a conta e as demais associações permanecem. Não remove o
+        primary proprietário da residência, preservando a regra de um primary
+        por casa.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/HomeId"
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "204":
+          description: Associação removida
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/homes/{home_id}/primary:
+    patch:
+      tags: [homes]
+      operationId: transferHomePrimary
+      summary: Transfere a titularidade da residência
+      description: |
+        Exclusivo de `master`. O novo primary deve ser membro atual da casa;
+        o antigo primary continua associado como membro.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/HomeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferHomePrimary"
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Titularidade atualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeProfile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "422":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: Lista todas as contas
+      description: Requer token válido de uma conta com perfil master.
+      security:
+        - bearerAuth: []
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "200":
+          description: Perfis de usuários, consultados internamente em páginas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/v1/users/{user_id}:
+    delete:
+      tags: [users]
+      operationId: deleteUser
+      summary: Remove uma conta globalmente
+      description: |
+        Requer token válido de uma conta `master`. Não permite remover a própria
+        conta, outra conta `master` ou uma conta que ainda seja primary de uma
+        residência.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          description: UUID do usuário que será removido
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        default:
+          $ref: "#/components/responses/Problem"
+        "204":
+          description: Conta removida; resposta sem corpo
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "404":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave aleatória e estável durante retries; retenção de 24 horas.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 200
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Mesmo valor presente no cookie `securebase-csrf`.
+      schema:
+        type: string
+    CsrfTokenOptional:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Obrigatório quando o cookie `securebase-refresh` está presente.
+      schema:
+        type: string
+    HomeId:
+      name: home_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token JWT HS256 da API SecureBase; informe somente o token.
+  schemas:
+    Health:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+    AddHomeMember:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+    CreateHome:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+    HomeProfile:
+      type: object
+      additionalProperties: false
+      required: [id, name, primary_user_id, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        primary_user_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [master, primary, member]
+    TransferHomePrimary:
+      type: object
+      additionalProperties: false
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+    RegisterResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Conta criada. Você já pode entrar.
+    LoginResponse:
+      type: object
+      required: [access_token, token_type, expires_in, user, csrf_token]
+      properties:
+        access_token:
+          type: string
+          description: JWT HS256 emitido e validado pela API SecureBase.
+        token_type:
+          type: string
+          const: bearer
+        expires_in:
+          type: integer
+          minimum: 1
+        user:
+          $ref: "#/components/schemas/UserProfile"
+        csrf_token:
+          type: string
+          description: Token CSRF para enviar no cabeçalho durante refresh e logout.
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          format: password
+          minLength: 1
+          maxLength: 128
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 128
+    UserProfile:
+      type: object
+      additionalProperties: false
+      required: [id, email, name, role]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [master, primary, member]
+    Problem:
+      type: object
+      required: [type, title, status, detail, instance, code, traceId]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+          enum:
+            - ACCOUNT_ALREADY_EXISTS
+            - ACCOUNT_CONFLICT
+            - ACCOUNT_PENDING
+            - ADMIN_DELETION_FORBIDDEN
+            - AUTHENTICATION_REQUIRED
+            - BAD_REQUEST
+            - CSRF_VALIDATION_FAILED
+            - DATABASE_UNAVAILABLE
+            - FORBIDDEN
+            - HOME_MEMBER_CONFLICT
+            - HOME_MEMBER_NOT_FOUND
+            - HOME_MEMBER_REQUIRED
+            - HOME_NOT_FOUND
+            - HOME_OWNER_DELETION_FORBIDDEN
+            - HOME_PRIMARY_CONFLICT
+            - HOME_PRIMARY_REMOVAL_FORBIDDEN
+            - HTTP_ERROR
+            - IDEMPOTENCY_IN_PROGRESS
+            - IDEMPOTENCY_KEY_REUSED
+            - INTERNAL_ERROR
+            - INVALID_ACCESS_TOKEN
+            - INVALID_CREDENTIALS
+            - INVALID_CURRENT_PASSWORD
+            - INVALID_DATABASE_RESPONSE
+            - INVALID_PASSWORD_HASH
+            - INVALID_PROFILE_DATA
+            - INVALID_REFRESH_TOKEN
+            - MASTER_DELETION_FORBIDDEN
+            - MASTER_REMOVAL_FORBIDDEN
+            - METHOD_NOT_ALLOWED
+            - NOT_FOUND
+            - PASSWORD_UNCHANGED
+            - PASSWORD_UPDATE_CONFLICT
+            - SELF_DELETION_FORBIDDEN
+            - USER_NOT_FOUND
+            - VALIDATION_ERROR
+        traceId:
+          type: [string, "null"]
+        fields:
+          type: array
+          items:
+            type: string
+      example:
+        type: urn:securebase:problem:authentication-required
+        title: Não autenticado
+        status: 401
+        detail: Envie um token de acesso válido.
+        instance: /api/v1/auth/me
+        code: AUTHENTICATION_REQUIRED
+        traceId: 00000000-0000-4000-8000-000000000000
+  responses:
+    Problem:
+      description: Erro no formato RFC 9457
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
