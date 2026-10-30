@@ -23,7 +23,9 @@ endereço de e-mail.
 - Usar a chave de servidor Supabase somente no backend para acesso ao banco.
 - Usar Supabase CLI localmente para manter PostgreSQL compatível com a
   instância de produção.
-- Conceder o primeiro papel `primary` manualmente após o cadastro inicial.
+- Conceder o primeiro papel global `master` manualmente após criar a conta do
+  administrador. O papel `primary` é associado a uma residência: quem cria a
+  residência autenticado torna-se seu titular.
 - Emitir access JWT HS256 válido por 15 minutos e refresh token opaco, rotativo,
   em cookie `HttpOnly`; a sessão tem expiração absoluta de 30 dias.
 - Persistir somente o hash do refresh token. Associar refresh sessions a uma

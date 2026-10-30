@@ -61,27 +61,173 @@ A renovação de sessão, idempotência e contrato de erros estão em
 ```text
 secure_base_back-end/
 ├── src/
-│   ├── config.py          # Configuração validada por ambiente
-│   ├── dependencies.py    # Autenticação e autorização
-│   ├── errors.py          # Problem Details e validação
-│   ├── main.py            # Aplicação ASGI
-│   ├── models.py         # Contratos Pydantic
-│   ├── routes.py          # Health, auth e usuários
-│   └── supabase.py        # Integração com Auth/PostgREST
-├── database/migrations/   # SQL versionado para perfis e RLS
-├── tests/                 # Testes automatizados
-├── docs/adr/              # Decisões arquiteturais
-├── .env.example           # Exemplo sem credenciais reais
-├── requirements*.txt      # Dependências runtime e de desenvolvimento
+│   ├── app/               # Criação da aplicação e configuração de logs
+│   ├── config/            # Configurações carregadas do ambiente
+│   ├── modules/           # Funcionalidades organizadas em camadas
+│   │   ├── auth/          # Autenticação, dependências e autorização
+│   │   ├── controller/   # Coordenação entre rotas e serviços
+│   │   ├── repository/   # Acesso ao PostgreSQL via Supabase/PostgREST
+│   │   ├── routes/       # Endpoints HTTP da API
+│   │   ├── schemas/      # Contratos, validação e respostas Pydantic
+│   │   └── service/      # Regras de negócio e operações da aplicação
+│   ├── shared/errors/     # Erros padronizados no formato RFC 9457
+│   ├── main.py            # Ponto de entrada da aplicação ASGI
+│   └── middleware.py      # ID de requisição e log de conclusão HTTP
+├── supabase/
+│   ├── config.toml        # Configuração do Supabase local
+│   └── migrations/        # Migrações SQL versionadas
+├── tests/                 # Testes automatizados da API
+├── docs/
+│   ├── adr/               # Decisões arquiteturais
+│   └── api.yml            # Contrato OpenAPI versionado
+├── .env.example           # Modelo de configuração sem credenciais reais
 ├── Dockerfile
+├── package.json           # Dependências JavaScript auxiliares do projeto
 └── INSTRUCOES.md
 ```
 
-Uma rota valida o formato pelo modelo Pydantic, autentica o bearer token,
-carrega o perfil persistido, verifica a autorização e só então executa a
-operação. O gateway concentra as chamadas externas ao Supabase. Novas regras
-de negócio devem ficar em serviços dedicados quando deixarem de ser triviais;
-não adicione módulos vazios para funcionalidades ainda não existentes.
+### Responsabilidade de cada pasta e arquivo
+
+#### Aplicação e configuração
+
+- **`src/main.py`** cria a aplicação e, quando executado diretamente, inicia o
+  servidor Uvicorn usando host, porta e ambiente configurados.
+- **`src/app/factory.py`** monta a aplicação FastAPI: configura CORS, registra
+  o middleware e os tratadores de erro, inclui as rotas e gera o OpenAPI com o
+  formato de erro `Problem`.
+- **`src/app/logging.py`** disponibiliza o logger usado para registrar eventos
+  de requisição e falhas inesperadas.
+- **`src/config/settings.py`** define as configurações vindas do `.env` ou do
+  ambiente, valida valores como prefixo, origens CORS e requisitos de TLS, e
+  fornece a instância reutilizável de configurações.
+- **`src/middleware.py`** atribui um identificador único a cada requisição,
+  devolve-o no header `X-Request-ID` e registra método, caminho, status e
+  duração, sem registrar credenciais ou corpos.
+
+#### `src/modules/auth/` — autenticação e autorização
+
+Essa pasta trata de **quem está fazendo a requisição** e **o que essa pessoa
+pode fazer**. Ela é diferente de `src/modules/service/`, que contém regras e
+operações de negócio.
+
+- **`dependencies.py`** fornece dependências FastAPI para criar o repositório,
+  exigir um bearer token válido e disponibilizar o usuário autenticado.
+- **`middleware.py`** define verificações reutilizáveis de permissão: acesso
+  exclusivo de `master` ou acesso de `primary` à própria residência (com
+  `master` também autorizado).
+- **`security.py`** implementa hash e verificação de senhas com scrypt,
+  emissão e validação de access JWTs, criação de refresh tokens e hash dos
+  refresh tokens.
+
+#### `src/modules/routes/` — endpoints HTTP
+
+As rotas recebem a requisição, aplicam dependências de autenticação/autorização,
+validam entradas com schemas, chamam controllers e definem status e formato das
+respostas. Não devem concentrar regras de negócio nem chamadas diretas ao banco.
+
+- **`auth_routes.py`** expõe cadastro, login, renovação e encerramento de
+  sessão, consulta do perfil e alteração de senha. Também configura cookies de
+  sessão, proteção CSRF e idempotência no cadastro.
+- **`health_routes.py`** expõe os endpoints públicos `/health/live` e
+  `/health/ready`.
+- **`homes_routes.py`** expõe criação e consulta de residências, gestão de
+  membros e transferência de titularidade, aplicando as permissões adequadas.
+- **`users_routes.py`** expõe consulta e remoção global de contas, restritas a
+  `master`.
+- **`routes.py`** reúne os routers: health fica fora do prefixo versionado; as
+  demais rotas ficam sob o prefixo configurado, normalmente `/api/v1`.
+
+#### `src/modules/controller/` — coordenação dos casos de uso
+
+Os controllers fazem a ponte entre endpoints e serviços. Recebem dados já
+validados, chamam a operação correspondente e retornam seu resultado, mantendo
+as rotas mais simples e sem repetir regras de negócio.
+
+- **`auth_controller.py`** coordena cadastro, login, refresh/logout, consulta
+  do usuário atual e troca de senha.
+- **`health_controller.py`** responde ao liveness e consulta se as dependências
+  necessárias estão prontas.
+- **`homes_controller.py`** encaminha operações de residências e membros para
+  os serviços correspondentes.
+- **`users_controller.py`** encaminha consulta e remoção de contas.
+
+#### `src/modules/service/` — regras de negócio
+
+Os serviços implementam o comportamento da aplicação, combinando validações,
+decisões de negócio e operações do repositório. É o local apropriado para
+regras que não devem ficar presas ao protocolo HTTP.
+
+- **`auth_service.py`** implementa cadastro e ativação de conta pendente,
+  autenticação, emissão e renovação de sessão, logout, validação do usuário
+  autenticado e alteração de senha com invalidação das sessões anteriores.
+- **`health_service.py`** verifica se o banco e os recursos necessários estão
+  disponíveis para a API.
+- **`homes_service.py`** lista e cria residências, calcula o papel do usuário
+  em cada uma e coordena as operações de membros e titularidade.
+- **`users_service.py`** aplica regras para listar/remover contas e adicionar
+  ou remover membros de residências, incluindo as restrições de titularidade.
+- **`idempotency_service.py`** impede que operações de criação sejam
+  duplicadas: compara a chave e o conteúdo da requisição, reproduz respostas
+  concluídas e informa conflitos ou operações ainda em andamento.
+
+#### `src/modules/repository/` — persistência e integração
+
+- **`supabase_repository.py`** concentra o acesso ao PostgreSQL por
+  Supabase/PostgREST. Faz consultas e alterações em contas, residências,
+  associações de membros, sessões e chaves de idempotência; também chama as
+  funções RPC necessárias e converte registros em perfis. Controllers e
+  serviços não devem montar requisições HTTP ao banco diretamente.
+
+#### `src/modules/schemas/` — contratos e validação
+
+Os schemas Pydantic definem os dados aceitos e devolvidos pela API. Eles validam
+formatos e limites de campos e evitam que cada endpoint implemente sua própria
+validação.
+
+- **`auth_schemas.py`** define papéis, perfil de usuário e contratos de
+  cadastro, login, refresh e alteração de senha.
+- **`health_schemas.py`** define a resposta dos health checks.
+- **`homes_schemas.py`** define entrada e resposta para residências e
+  transferência de titularidade.
+- **`users_schemas.py`** define a entrada para associar uma conta a uma
+  residência.
+
+#### Erros, banco, testes e documentação
+
+- **`src/shared/errors/problem_details.py`** define o erro `Problem` e
+  converte erros de negócio, validação, HTTP e falhas inesperadas para
+  `application/problem+json`, conforme RFC 9457.
+- **`supabase/migrations/`** guarda alterações incrementais do schema,
+  funções SQL e políticas de segurança do banco. Migrações já aplicadas não
+  devem ser editadas; crie uma nova para corrigir o schema.
+- **`tests/test_api.py`** contém os testes automatizados de contratos,
+  autenticação, autorização e respostas da API.
+- **`docs/api.yml`** mantém o contrato OpenAPI; **`docs/adr/`** registra as
+  decisões arquiteturais e seus motivos.
+- **`.env.example`** documenta os nomes das configurações esperadas sem conter
+  segredos reais; **`Dockerfile`** descreve a imagem da API; **`package.json`**
+  declara dependências JavaScript auxiliares presentes no projeto.
+
+### Fluxo de uma requisição
+
+Em geral, uma requisição passa por esta sequência:
+
+1. `src/app/factory.py` recebe a requisição na aplicação FastAPI e aplica os
+   middlewares.
+2. O módulo em `src/modules/routes/` valida os parâmetros e o corpo usando os
+   schemas de `src/modules/schemas/`.
+3. As dependências de `src/modules/auth/` identificam o usuário e verificam
+   suas permissões antes da operação protegida.
+4. O controller encaminha o caso de uso ao service correspondente.
+5. O service aplica as regras de negócio e usa
+   `SupabaseRepository` para consultar ou alterar os dados.
+6. A resposta retorna pela rota; erros conhecidos são convertidos para o
+   formato RFC 9457.
+
+Mantenha cada responsabilidade na camada correspondente: rotas cuidam do
+protocolo HTTP, controllers coordenam, services aplicam regras de negócio e o
+repository concentra o acesso a dados. Não crie módulos vazios para
+funcionalidades ainda não implementadas.
 
 ## 4. Contrato HTTP
 

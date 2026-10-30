@@ -4,6 +4,29 @@ API Python/FastAPI com autenticação própria e contas no PostgreSQL do Supabas
 O Supabase Auth não é usado. A API valida hashes scrypt e emite JWTs HS256 sem
 confirmar o e-mail nem depender de SMTP.
 
+## Organização do código
+
+O código da API fica em `src/` e é dividido por responsabilidade:
+
+- **`app/` e `config/`** montam a aplicação FastAPI e validam as configurações
+  do ambiente.
+- **`modules/auth/`** autentica usuários e verifica permissões; **`routes/`**
+  define os endpoints HTTP e **`controller/`** encaminha as requisições para
+  os casos de uso.
+- **`modules/service/`** implementa as regras de negócio; **`repository/`**
+  concentra o acesso ao PostgreSQL por Supabase/PostgREST; **`schemas/`**
+  valida e documenta os contratos de entrada e saída.
+- **`shared/errors/`** padroniza respostas de erro; `middleware.py` adiciona
+  identificadores e logs às requisições.
+- **`supabase/migrations/`** versiona alterações de banco, **`tests/`** contém
+  testes automatizados e **`docs/`** guarda o contrato OpenAPI e decisões
+  arquiteturais.
+
+O fluxo normal é: rota valida e autentica a requisição, controller coordena o
+caso de uso, service aplica as regras e repository acessa os dados. Consulte
+[`INSTRUCOES.md`](./INSTRUCOES.md) para a descrição detalhada de cada pasta e
+arquivo, endpoints, configuração e testes.
+
 ## Instalar dependências
 
 Instale Python 3.12 ou superior. No PowerShell, a partir da raiz do projeto:

@@ -28,9 +28,9 @@
   `member` após criar as respectivas casas; a titularidade passa a ser mantida
   em `securebase_homes.primary_user_id`.
 - O cadastro não confirma a titularidade do e-mail. As contas podem ser
-  criadas imediatamente, e a resposta é neutra para não revelar se a conta já
-  existe; use um canal confiável para verificar a identidade antes de conceder
-  privilégios `master`.
+  criadas imediatamente; e-mail já cadastrado retorna `409`, portanto a
+  resposta pode revelar se uma conta existe. Use um canal confiável para
+  verificar a identidade antes de conceder privilégios `master`.
 - O papel `master` só pode ser atribuído manualmente no banco; não há endpoint
   de autopromoção.
 - Erros HTTP usam `application/problem+json` sem detalhes internos do provedor.
@@ -39,7 +39,8 @@
 
 ## Revisões operacionais pendentes
 
-Antes da produção, configure SMTP autenticado com TLS, rate limiting no gateway,
-segredos fortes/rotacionáveis e HTTPS; teste autorização usando contas separadas.
-Não promova um administrador sem verificar por um canal confiável a identidade
-do usuário e o identificador da conta.
+Antes da produção, configure rate limiting no gateway, segredos
+fortes/rotacionáveis e HTTPS; teste autorização usando contas separadas. Se o
+envio de e-mail for implementado (por exemplo, para recuperação de senha),
+configure SMTP autenticado com TLS. Não promova um administrador sem verificar
+por um canal confiável a identidade do usuário e o identificador da conta.
