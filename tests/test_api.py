@@ -836,6 +836,18 @@ def test_live_health_is_public() -> None:
     assert response.headers["x-request-id"]
 
 
+def test_root_returns_public_api_information_without_authentication() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "name": "SecureBase API",
+        "version": app.version,
+        "status": "online",
+        "documentation": "/docs",
+    }
+
+
 def test_ready_health_checks_database() -> None:
     app.dependency_overrides[get_repository] = lambda: FakeGateway()
     try:
