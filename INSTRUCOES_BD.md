@@ -139,7 +139,7 @@ supabase status
 A saída contém valores sensíveis mesmo quando destinados apenas ao computador
 local. Use-a somente para preencher o `.env` e não a copie para mensagens,
 logs públicos, documentação ou issues. O `.env.example` contém placeholders e
-pode ser copiado apenas quando o arquivo `.env` ainda não existir:
+pode ser copiado apenas quando o arquivo `.env` ainda não existir: 
 
 ```powershell
 if (-not (Test-Path .env)) {
