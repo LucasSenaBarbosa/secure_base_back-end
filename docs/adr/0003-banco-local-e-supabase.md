@@ -44,14 +44,20 @@ as migrations sem credenciais de produção.
      proposta de aplicação em produção. Migrations já aplicadas não devem ser
      alteradas; correções são migrations adicionais.
 
-4. **Manter o deploy remoto explícito e bloqueado até haver pré-requisitos.**
-   - Nenhum workflow aplica migrations no banco remoto ou publica aplicações
-     enquanto os provedores de hospedagem não estiverem identificados e o
-     histórico de migrations do projeto remoto não tiver sido verificado e
-     regularizado manualmente.
-   - Uma futura implantação deve exigir CI aprovado, aprovação manual pelo
-     GitHub Environment `production`, verificação inequívoca do projeto de
-     destino e secrets restritos a esse ambiente.
+4. **Manter a aplicação de migrations remotas explícita e protegida.**
+   - O workflow `backend-ci.yml` define uma etapa `deploy-migrations` que roda
+     somente em pushes para `main`, depois de CI e validação local das
+     migrations. Ela usa o GitHub Environment `production`, verifica o
+     histórico remoto, bloqueia operações selecionadas, faz dry-run e então
+     aplica migrations pendentes.
+   - O workflow aplica migrations do banco; não publica a aplicação.
+   - O arquivo do workflow não configura as proteções do GitHub Environment.
+     Revisores obrigatórios, secrets, variáveis e identificação inequívoca do
+     projeto de destino devem ser verificados na configuração do repositório
+     antes de permitir uma execução em produção.
+   - O estado atual do projeto remoto não é comprovado por esta decisão. Uma
+     divergência no histórico deve bloquear o processo e ser regularizada por
+     procedimento manual revisado, sem reparação automática.
 
 ## Alternativas consideradas
 
@@ -63,9 +69,10 @@ as migrations sem credenciais de produção.
   que o projeto já define pelo Supabase CLI.
 - **Usar outro banco relacional:** não escolhido, pois o backend e as
   migrations existentes já usam PostgreSQL e recursos do Supabase.
-- **Aplicar migrations remotas automaticamente neste momento:** rejeitado.
-  Não há provedor/CD configurado e a situação do histórico remoto não foi
-  confirmada. Nenhuma reparação automática desse histórico é permitida.
+- **Executar migrations remotas sem controles no CI:** rejeitado. A etapa
+  remota deve depender de verificações aprovadas, destino explícito e
+  configuração protegida do GitHub Environment; nenhuma reparação automática
+  do histórico remoto é permitida.
 
 ## Consequências
 
@@ -77,10 +84,13 @@ as migrations sem credenciais de produção.
   enviados ao frontend.
 - A chave de serviço Supabase ignora RLS. A API deve continuar aplicando
   autenticação e autorização SecureBase antes das operações administrativas.
-- CI pode validar código, build do frontend e migrations em Supabase local sem
-  acessar o banco de produção.
-- Produção só pode receber migrations depois de revisão, validação local,
-  confirmação manual do destino e regularização segura do histórico remoto.
+- CI de branches e pull requests valida o backend e migrations em Supabase
+  local sem acessar o banco de produção. Em pushes para `main`, o job de
+  migrations também pode acessar o projeto configurado no Environment
+  `production`, após as verificações definidas no workflow.
+- A configuração do Environment e o histórico remoto precisam ser verificados
+  separadamente; a existência do job não prova que o deploy esteja configurado
+  nem que migrations tenham sido aplicadas.
 
 ## Segurança
 
@@ -94,8 +104,11 @@ as migrations sem credenciais de produção.
 - A chave Supabase usada pelo backend é enviada somente em chamadas de servidor
   ao PostgREST. A chave nunca deve ser colocada em variáveis `VITE_*` ou no
   bundle do frontend.
-- CI para branches e pull requests não recebe secrets de produção. Aprovações
-  manuais e restrições do Environment `production` devem ser configuradas no
-  GitHub antes de existir um workflow de deploy.
-- Não executar `supabase link`, `supabase db push`, `supabase db reset` ou
-  `supabase migration repair` para tentar corrigir o histórico remoto.
+- Branches e pull requests não recebem secrets de produção. O job de migrations
+  em `main` usa secrets e variáveis associados ao Environment `production`;
+  revisores obrigatórios e outras restrições precisam ser configurados no
+  próprio GitHub Environment.
+- Não executar manualmente `supabase link`, `supabase db push`,
+  `supabase db reset` ou `supabase migration repair` para tentar corrigir o
+  histórico remoto. A etapa automatizada não autoriza corrigir ou reparar
+  divergências sem revisão.

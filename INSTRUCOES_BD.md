@@ -3,9 +3,11 @@
 Este manual descreve a arquitetura de persistência do SecureBase e o fluxo
 local para iniciar o Supabase, configurar o backend, entender o schema e
 validar migrations. O desenvolvimento atual usa exclusivamente o Supabase
-local, executado pela Supabase CLI sobre Docker. As migrations ainda não foram
-aplicadas ao banco remoto; nenhum estado remoto é considerado validado por
-este documento.
+local, executado pela Supabase CLI sobre Docker. Este manual não confirma o
+estado do banco remoto. O workflow `backend-ci.yml` contém uma etapa
+`deploy-migrations` em pushes para `main`, associada ao GitHub Environment
+`production`; a existência da etapa não comprova que o projeto remoto esteja
+configurado ou que migrations tenham sido aplicadas.
 
 ## 1. Arquitetura e responsabilidades
 
@@ -48,8 +50,8 @@ saída de `supabase status`: ela pode conter credenciais geradas localmente.
 Também não versione `.env` nem arquivos temporários do CLI.
 
 **Estado nesta revisão:** migrations e validações foram executadas no ambiente
-local. Nenhuma migration foi aplicada a um banco remoto. O estado e o histórico
-remotos não estão confirmados neste manual.
+local. O estado e o histórico remotos, incluindo se migrations foram aplicadas,
+não foram validados por este manual.
 
 ## 3. Pré-requisitos para Windows
 
@@ -384,7 +386,7 @@ execute INSERT, UPDATE ou DELETE para conferir conectividade.
 
 ## 12. Segurança e bloqueio de operações remotas
 
-Para este fluxo de desenvolvimento, não execute:
+Para o fluxo local de desenvolvimento, não execute manualmente:
 
 ```text
 supabase link
@@ -398,16 +400,21 @@ Não passe `--linked`, `--project-ref` ou uma URL remota para comandos de lint
 ou migration. Não conecte ferramentas de banco ao endereço de produção para
 testes.
 
-O histórico remoto de migrations não foi regularizado automaticamente e a
-configuração de produção permanece pendente. Se uma divergência remota impedir
-um deploy futuro, interrompa o processo e peça regularização manual revisada.
-Não tente alinhar o histórico com `repair`, aplicar migrations ou alterar o
-schema remoto por conta própria.
+O histórico remoto de migrations e a configuração do projeto de produção não
+são validados por este manual. O workflow possui uma etapa própria de aplicação
+de migrations, condicionada a push para `main` e ao GitHub Environment
+`production`; antes de habilitá-la operacionalmente, confirme o projeto de
+destino, as variáveis e secrets, as proteções do Environment e o histórico
+remoto. Se houver divergência, interrompa o processo e solicite regularização
+manual revisada. Não tente alinhar o histórico com `repair`, aplicar migrations
+remotamente ou alterar o schema por conta própria.
 
 Produção deve ter projeto, URL, chave Supabase e segredo JWT independentes.
-Secrets de produção só poderão ser configurados após decisão de hospedagem e
-aprovação do processo, restritos ao GitHub Environment `production`, com
-revisores obrigatórios. Branches e pull requests não devem ter acesso a eles.
+Secrets de produção devem ser restritos ao GitHub Environment `production`;
+configure e verifique revisores obrigatórios e demais proteções nesse
+Environment. Branches e pull requests não devem ter acesso a esses secrets. O
+workflow executa a etapa de migrations somente em pushes para `main`; isso não
+representa deploy da aplicação.
 
 Consulte também [ADR 0003 — Banco local, Supabase e PostgreSQL](./docs/adr/0003-banco-local-e-supabase.md)
 para o racional arquitetural e [README.md](./README.md) para a visão geral do

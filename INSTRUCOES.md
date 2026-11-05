@@ -46,8 +46,13 @@ são administrados pelo SecureBase.
   CI.
 - **Implementado, mas não validado em ambiente remoto:** não há aplicação
   hospedada ou banco remoto aprovado para validação nesta etapa.
-- **Pendente de configuração:** provedores de hospedagem, secrets de produção,
-  aprovação do GitHub Environment `production`, proteções de branch e deploy.
+- O workflow contém uma etapa `deploy-migrations` que pode aplicar migrations
+  ao projeto associado ao GitHub Environment `production` em pushes para
+  `main`, depois das verificações e dos controles definidos no workflow. A
+  configuração desse Environment, das proteções e das credenciais, bem como o
+  estado remoto, não é confirmado por este documento.
+- **Pendente:** deploy da aplicação e validação em infraestrutura hospedada.
+  Não confunda a etapa de migrations do workflow com publicação da aplicação.
 - A migration corretiva `20261101000100_qualify_refresh_session_family_id.sql`
   está no histórico local do projeto e foi aplicada e validada no Supabase
   local. Isso **não** significa que ela ou as demais migrations tenham sido
@@ -58,9 +63,10 @@ são administrados pelo SecureBase.
 Dispositivos, sensores, leituras, alertas, eventos e auditoria persistente ainda
 não fazem parte do backend. Recuperação de senha e confirmação de e-mail
 também não estão implementadas. Rate limiting, observabilidade operacional,
-validação end-to-end em infraestrutura hospedada e deploy dependem de
-implementação e/ou configuração futura. Não trate essas pendências como
-entregues apenas porque há tabelas ou serviços relacionados no Supabase.
+validação end-to-end em infraestrutura hospedada e deploy da aplicação
+dependem de implementação e/ou configuração futura. A etapa de migrations do
+banco no workflow não implementa publicação da API. Não trate essas pendências
+como entregues apenas porque há tabelas ou serviços relacionados no Supabase.
 
 ## 2. Decisões técnicas
 
@@ -79,6 +85,11 @@ entregues apenas porque há tabelas ou serviços relacionados no Supabase.
 O detalhamento está em [ADR 0001](./docs/adr/0001-python-fastapi-supabase.md).
 A renovação de sessão, idempotência e contrato de erros estão em
 [ADR 0002](./docs/adr/0002-sessoes-idempotencia-e-erros-http.md).
+A organização por camadas e a aplicação do Princípio da Responsabilidade Única
+estão nas [ADRs 0005](./docs/adr/0005-organizacao-layer-first.md) e
+[0006](./docs/adr/0006-principio-responsabilidade-unica.md). A pasta
+`shared/errors/` e o contrato Problem Details estão detalhados na
+[ADR 0004](./docs/adr/0004-erros-api-rfc-9457.md).
 Para configuração local, schema e fluxo de migrations, consulte o
 [manual do banco de dados](./INSTRUCOES_BD.md).
 
@@ -398,10 +409,13 @@ sobrescrever as credenciais existentes; não versione o arquivo real.
 No frontend, somente `VITE_API_BASE_URL` aponta para a API Python. Não são
 necessárias chaves ou SDK de autenticação Supabase no frontend.
 
-Desenvolvimento deve usar o Supabase local. Produção, quando existir, deve ter
-projeto, chaves e segredos próprios. Os testes automatizados da API substituem
-o repository por um gateway em memória; não são testes de integração com banco
-real. Os workflows não recebem credenciais de produção.
+Desenvolvimento deve usar o Supabase local. Produção deve ter projeto, chaves
+e segredos próprios. Os testes automatizados da API substituem o repository
+por um gateway em memória; não são testes de integração com banco real.
+Branches e pull requests não recebem credenciais de produção. A etapa
+`deploy-migrations` em `main` usa secrets e variáveis do GitHub Environment
+`production`; confira suas proteções e configuração no GitHub antes de depender
+dela.
 
 ## 7. Configuração, migrações e execução local
 
@@ -438,11 +452,14 @@ o destino antes de executar qualquer comando. Migrations aplicadas ou que
 possam ter sido aplicadas em outro ambiente não devem ser editadas ou
 removidas; correções são novas migrations.
 
-O histórico remoto ainda não foi regularizado nem verificado para este fluxo.
-Não execute `supabase link`, `supabase db push`, `supabase db reset` ou
-`supabase migration repair`. Não aplique migrations remotas. Antes de qualquer
-deploy, a hospedagem e o processo de banco deverão ser aprovados manualmente;
-esta etapa não configura deploy nem rollback.
+O histórico remoto ainda não foi validado por este manual. Para o fluxo local,
+não execute manualmente `supabase link`, `supabase db push`, `supabase db reset`
+ou `supabase migration repair`, nem aplique migrations remotas. O workflow
+`backend-ci.yml` contém uma etapa de aplicação de migrations em `main`,
+associada ao GitHub Environment `production`. Antes de qualquer execução,
+confirme o projeto de destino, o histórico remoto, os secrets e variáveis, e as
+proteções do Environment; a exigência de aprovação depende da configuração no
+GitHub. Essa etapa não publica a aplicação nem configura rollback.
 
 ## 8. Testes e CI
 
@@ -457,9 +474,13 @@ cadastro/login, resposta RFC 9457, sessões e permissões de membro, primary e
 master. A suíte substitui o repository por um gateway em memória; portanto,
 Pytest não comprova integração real com PostgREST. O workflow
 `.github/workflows/backend-ci.yml` executa Ruff, Pytest e inicia Supabase local
-efêmero para aplicar e validar as migrations. `supabase db lint --local
---fail-on error` verifica erros de schema, mas não substitui testes funcionais
-de todos os fluxos SQL.
+efêmero para aplicar e validar as migrations. Em pushes para `main`, também
+define uma etapa de aplicação de migrations no projeto associado ao GitHub
+Environment `production`, após as verificações e os controles de segurança do
+workflow. A etapa não publica a aplicação; a existência do job não comprova
+que o Environment e o projeto remoto estejam configurados ou validados.
+`supabase db lint --local --fail-on error` verifica erros de schema, mas não
+substitui testes funcionais de todos os fluxos SQL.
 
 Não há testes automatizados versionados que executem BOLA end-to-end entre
 residências nem testes end-to-end contra uma instalação hospedada. Rate
