@@ -60,8 +60,10 @@ endereço de e-mail.
   reutilizados e precisam se cadastrar novamente.
 - O primeiro administrador precisa ser promovido manualmente no banco.
 - Chamadas do backend usam uma chave de servidor que ignora RLS. Por isso,
-  cada rota administrativa verifica o perfil `primary` antes de consultar o
-  banco. A chave nunca é enviada ao frontend.
+  as dependências de autorização verificam o perfil exigido pela operação:
+  `master` para ações globais ou `primary` para ações na própria residência,
+  antes da operação administrativa protegida. A chave nunca é enviada ao
+  frontend.
 - Refresh tokens roubados não podem ser reutilizados após a rotação; a família
   é revogada se a versão de autenticação divergir. A expiração não é estendida
   a cada rotação.

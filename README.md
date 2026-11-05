@@ -7,6 +7,11 @@ usuários do SecureBase.
 
 ## Arquitetura
 
+- O backend é organizado por camadas (*layer-first*), com uma responsabilidade
+  técnica por camada e o nome da funcionalidade nos arquivos. Essa separação
+  aplica o Princípio da Responsabilidade Única; consulte as
+  [ADRs 0005](./docs/adr/0005-organizacao-layer-first.md) e
+  [0006](./docs/adr/0006-principio-responsabilidade-unica.md).
 - `src/app/` e `src/config/`: criação da aplicação e configurações.
 - `src/modules/routes/`: endpoints e contratos HTTP.
 - `src/modules/controller/`: coordenação das requisições.
@@ -63,8 +68,13 @@ supabase db lint --local --fail-on error
 ```
 
 O workflow [`backend-ci.yml`](./.github/workflows/backend-ci.yml) executa Ruff,
-Pytest e valida as migrations em um Supabase local. O contrato OpenAPI
-executável está em `/openapi.json`; `docs/api.yml` é a cópia versionada.
+Pytest e valida as migrations em um Supabase local. Em um `push` para `main`,
+ele também define uma etapa de aplicação de migrations no Supabase associado
+ao GitHub Environment `production`, após as verificações e os controles de
+segurança do workflow. Isso não publica a aplicação; a configuração do
+Environment, das proteções e das credenciais precisa ser verificada no GitHub.
+O contrato OpenAPI executável está em `/openapi.json`; `docs/api.yml` é a cópia
+versionada.
 
 ## Ambientes e mudanças no banco
 
@@ -73,9 +83,11 @@ hospedado. Alterações estruturais são migrations SQL novas, revisadas,
 versionadas e testadas localmente. Não edite migrations já aplicadas nem altere
 o schema hospedado diretamente como procedimento normal.
 
-O deploy de produção não está configurado: os provedores de hospedagem não
-foram identificados e o histórico remoto de migrations precisa ser verificado
-e regularizado manualmente. Os workflows atuais executam CI, não fazem deploy
-e não recebem secrets de produção em branches ou pull requests. Consulte
+O deploy da aplicação não está configurado. O workflow de migrations de
+produção está definido, mas a configuração e o histórico do projeto remoto não
+foram validados por esta documentação; sua existência não comprova que uma
+migration já tenha sido aplicada. Branches e pull requests executam CI sem
+receber secrets de produção; a etapa de migrations só roda em `main` e usa o
+GitHub Environment `production`. Consulte
 [`INSTRUCOES.md`](./INSTRUCOES.md) para o fluxo de desenvolvimento e
 [`INSTRUCOES_BD.md`](./INSTRUCOES_BD.md) para os procedimentos locais.
