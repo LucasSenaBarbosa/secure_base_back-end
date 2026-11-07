@@ -50,8 +50,12 @@ info:
     Erros HTTP automáticos de rota ou método inexistente também usam o mesmo
     contrato (`NOT_FOUND` e `METHOD_NOT_ALLOWED`).
 
-    Para rotas protegidas, use o JWT emitido pela API no login. No Swagger UI,
-    clique em **Authorize** e informe somente o token, sem escrever `Bearer`.
+    Para rotas protegidas, use o JWT emitido pela API no login. No Swagger UI
+    (`/docs`), clique em **Authorize** e informe somente o token, sem escrever
+    `Bearer`: o Swagger adiciona o prefixo, e `Bearer Bearer <token>` é recusado.
+    Sem token, rotas protegidas respondem `401 AUTHENTICATION_REQUIRED`; token
+    expirado, alterado ou de sessão revogada responde `401 INVALID_ACCESS_TOKEN`.
+    O passo a passo completo aparece na descrição exibida em `/docs`.
 
     O Supabase Auth não é usado. Senhas com hash scrypt e contas ficam na tabela
     securebase_users. O cadastro não confirma o e-mail e não depende de SMTP.
@@ -69,6 +73,8 @@ tags:
     description: Residências e associação de usuários
   - name: users
     description: Administração global de contas (perfil master)
+  - name: optimization
+    description: Layout da residência e otimização NSGA-II da posição de sensores
 paths:
   /health/live:
     get:
@@ -563,6 +569,468 @@ paths:
           $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/Problem"
+  /api/v1/homes/{home_id}/layout:
+    get:
+      tags:
+      - optimization
+      summary: Obter o layout da residência
+      description: 'Retorna o layout salvo (`source: saved`) ou, se ainda não houver, o layout-base da maquete
+        (`source: template`, `version: 0`) com orçamento e custos vazios.'
+      operationId: get_layout_api_v1_homes__home_id__layout_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutDocument'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags:
+      - optimization
+      summary: Salvar o layout da residência
+      description: Substitui o layout inteiro. Envie em `version` a versão lida (0 no primeiro salvamento);
+        versões divergentes respondem `409 LAYOUT_VERSION_CONFLICT`.
+      operationId: save_layout_api_v1_homes__home_id__layout_put
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveLayoutRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LayoutDocument'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/configurations/evaluate:
+    post:
+      tags:
+      - optimization
+      summary: Avaliar uma configuração de sensores
+      description: Calcula cobertura, custo, vulnerabilidade e restrições de uma configuração contra o layout
+        salvo, sem gravar nada.
+      operationId: evaluate_configuration_api_v1_homes__home_id__configurations_evaluate_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Evaluation'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/optimization-runs:
+    post:
+      tags:
+      - optimization
+      summary: Executar a otimização NSGA-II
+      description: Executa o NSGA-II sobre o layout salvo e grava a execução com as soluções viáveis e não
+        dominadas. A resposta não elege uma solução como a melhor.
+      operationId: run_optimization_api_v1_homes__home_id__optimization_runs_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizationRunRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+    get:
+      tags:
+      - optimization
+      summary: Listar otimizações
+      operationId: list_runs_api_v1_homes__home_id__optimization_runs_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 0
+          default: 0
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunSummary'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/optimization-runs/{run_id}:
+    get:
+      tags:
+      - optimization
+      summary: Detalhar uma otimização
+      description: Inclui o layout usado na execução e a fronteira de Pareto.
+      operationId: get_run_api_v1_homes__home_id__optimization_runs__run_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/optimization-runs/{run_id}/solutions/{solution_id}:
+    get:
+      tags:
+      - optimization
+      summary: Detalhar uma solução
+      description: Inclui a probabilidade de detecção de cada ponto crítico.
+      operationId: get_solution_api_v1_homes__home_id__optimization_runs__run_id__solutions__solution_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: solution_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolutionDetail'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/optimization-runs/{run_id}/compare:
+    post:
+      tags:
+      - optimization
+      summary: Comparar configuração manual com as soluções
+      description: Avalia a configuração manual com o mesmo layout da execução e indica, para cada solução,
+        as diferenças e a relação de dominância de Pareto.
+      operationId: compare_api_v1_homes__home_id__optimization_runs__run_id__compare_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompareRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comparison'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/manual-configurations:
+    get:
+      tags:
+      - optimization
+      summary: Listar configurações manuais
+      description: As métricas são recalculadas contra o layout salvo atual.
+      operationId: list_manual_configurations_api_v1_homes__home_id__manual_configurations_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManualConfiguration'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags:
+      - optimization
+      summary: Salvar configuração manual
+      operationId: create_manual_configuration_api_v1_homes__home_id__manual_configurations_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 200
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualConfigurationRequest'
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManualConfiguration'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/manual-configurations/{configuration_id}:
+    delete:
+      tags:
+      - optimization
+      summary: Remover configuração manual
+      operationId: delete_manual_configuration_api_v1_homes__home_id__manual_configurations__configuration_id__delete
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: configuration_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        default:
+          $ref: '#/components/responses/Problem'
+        '204':
+          description: Successful Response
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -738,6 +1206,714 @@ components:
         role:
           type: string
           enum: [master, primary, member]
+    CandidatePoint:
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+        room_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        position:
+          prefixItems:
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          type: array
+          maxItems: 3
+          minItems: 3
+        allowed_sensor_type_ids:
+          items:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+          type: array
+          maxItems: 20
+          minItems: 1
+        extra_installation_cost:
+          type: number
+          maximum: 10000000.0
+          minimum: 0.0
+          default: 0
+        direction:
+          anyOf:
+          - prefixItems:
+            - type: number
+              maximum: 50.0
+              minimum: -50.0
+            - type: number
+              maximum: 50.0
+              minimum: -50.0
+            - type: number
+              maximum: 50.0
+              minimum: -50.0
+            type: array
+            maxItems: 3
+            minItems: 3
+          - type: 'null'
+          description: Direção do sensor direcional. Quando ausente, aponta para o centro do ambiente.
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - room_id
+      - position
+      - allowed_sensor_type_ids
+    CompareRequest:
+      properties:
+        manual_configuration_id:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        sensors:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/SensorPlacement'
+            type: array
+            maxItems: 200
+          - type: 'null'
+      additionalProperties: false
+      type: object
+    Comparison:
+      properties:
+        run_id:
+          type: string
+          format: uuid
+        manual:
+          $ref: '#/components/schemas/Evaluation'
+        manual_is_dominated:
+          type: boolean
+          description: Verdadeiro se ao menos uma solução calculada domina a configuração manual.
+        entries:
+          items:
+            $ref: '#/components/schemas/ComparisonEntry'
+          type: array
+      type: object
+      required:
+      - run_id
+      - manual
+      - manual_is_dominated
+      - entries
+    ComparisonEntry:
+      properties:
+        solution_id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        delta_coverage:
+          type: number
+          description: Solução − manual.
+        delta_cost:
+          type: number
+          description: Solução − manual.
+        delta_vulnerability:
+          type: number
+          description: Solução − manual.
+        solution_dominates_manual:
+          type: boolean
+        manual_dominates_solution:
+          type: boolean
+      type: object
+      required:
+      - solution_id
+      - index
+      - metrics
+      - delta_coverage
+      - delta_cost
+      - delta_vulnerability
+      - solution_dominates_manual
+      - manual_dominates_solution
+    CriticalPoint:
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+        room_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        position:
+          prefixItems:
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          type: array
+          maxItems: 3
+          minItems: 3
+        importance:
+          type: integer
+          maximum: 5.0
+          minimum: 1.0
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - room_id
+      - position
+      - importance
+    Evaluation:
+      properties:
+        layout_version:
+          type: integer
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        feasible:
+          type: boolean
+        violations:
+          items:
+            $ref: '#/components/schemas/Violation'
+          type: array
+        points:
+          items:
+            $ref: '#/components/schemas/PointCoverage'
+          type: array
+      type: object
+      required:
+      - layout_version
+      - metrics
+      - feasible
+      - violations
+      - points
+    EvaluationRequest:
+      properties:
+        sensors:
+          items:
+            $ref: '#/components/schemas/SensorPlacement'
+          type: array
+          maxItems: 200
+      additionalProperties: false
+      type: object
+      required:
+      - sensors
+    HomeLayout:
+      properties:
+        budget:
+          anyOf:
+          - type: number
+            maximum: 10000000.0
+            minimum: 0.0
+          - type: 'null'
+          description: Orçamento máximo. Obrigatório para avaliar ou otimizar.
+        coverage_threshold:
+          type: number
+          maximum: 1.0
+          exclusiveMinimum: 0.0
+          description: Probabilidade mínima de detecção para um ponto contar como coberto.
+          default: 0.8
+        rooms:
+          items:
+            $ref: '#/components/schemas/Room'
+          type: array
+          maxItems: 50
+          minItems: 1
+        critical_points:
+          items:
+            $ref: '#/components/schemas/CriticalPoint'
+          type: array
+          maxItems: 300
+          minItems: 1
+        candidate_points:
+          items:
+            $ref: '#/components/schemas/CandidatePoint'
+          type: array
+          maxItems: 200
+          minItems: 1
+        sensor_types:
+          items:
+            $ref: '#/components/schemas/SensorType'
+          type: array
+          maxItems: 20
+          minItems: 1
+      additionalProperties: false
+      type: object
+      required:
+      - rooms
+      - critical_points
+      - candidate_points
+      - sensor_types
+    LayoutDocument:
+      properties:
+        home_id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - saved
+          - template
+        version:
+          type: integer
+        updated_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+        layout:
+          $ref: '#/components/schemas/HomeLayout'
+      type: object
+      required:
+      - home_id
+      - source
+      - version
+      - updated_at
+      - layout
+    ManualConfiguration:
+      properties:
+        id:
+          type: string
+          format: uuid
+        home_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sensors:
+          items:
+            $ref: '#/components/schemas/SensorPlacement'
+          type: array
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        evaluation:
+          anyOf:
+          - $ref: '#/components/schemas/Evaluation'
+          - type: 'null'
+          description: Métricas calculadas contra o layout salvo atual.
+        evaluation_error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Motivo de não haver avaliação (layout incompleto ou ponto removido).
+      type: object
+      required:
+      - id
+      - home_id
+      - name
+      - sensors
+      - created_at
+      - created_by
+      - evaluation
+    ManualConfigurationRequest:
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+        sensors:
+          items:
+            $ref: '#/components/schemas/SensorPlacement'
+          type: array
+          maxItems: 200
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      - sensors
+    Metrics:
+      properties:
+        coverage:
+          type: number
+          description: Fração dos pontos críticos cobertos (0–1).
+        cost:
+          type: number
+          description: 'Custo total: aquisição + instalação.'
+        vulnerability:
+          type: number
+          description: Vulnerabilidade residual ponderada pela importância (0–1).
+        sensor_count:
+          type: integer
+        sensors_by_type:
+          additionalProperties:
+            type: integer
+          type: object
+      type: object
+      required:
+      - coverage
+      - cost
+      - vulnerability
+      - sensor_count
+      - sensors_by_type
+    OptimizationRunRequest:
+      properties:
+        population_size:
+          type: integer
+          maximum: 200.0
+          minimum: 10.0
+          default: 60
+        generations:
+          type: integer
+          maximum: 300.0
+          minimum: 1.0
+          default: 100
+        seed:
+          anyOf:
+          - type: integer
+            maximum: 2147483647.0
+            minimum: 0.0
+          - type: 'null'
+          description: Semente para reprodutibilidade; gerada e retornada quando ausente.
+      additionalProperties: false
+      type: object
+    PointCoverage:
+      properties:
+        critical_point_id:
+          type: string
+        detection_probability:
+          type: number
+        covered:
+          type: boolean
+      type: object
+      required:
+      - critical_point_id
+      - detection_probability
+      - covered
+    Room:
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+        glb_node:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+        floor_y:
+          type: number
+          maximum: 50.0
+          minimum: -50.0
+        height:
+          type: number
+          maximum: 50.0
+          exclusiveMinimum: 0.0
+        min_xz:
+          prefixItems:
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          type: array
+          maxItems: 2
+          minItems: 2
+        max_xz:
+          prefixItems:
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          - type: number
+            maximum: 50.0
+            minimum: -50.0
+          type: array
+          maxItems: 2
+          minItems: 2
+        visible_room_ids:
+          items:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+          type: array
+          maxItems: 50
+          description: Ambientes cujos pontos são visíveis por sensores instalados neste.
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - floor_y
+      - height
+      - min_xz
+      - max_xz
+    RunDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+        home_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        layout_version:
+          type: integer
+        algorithm:
+          type: string
+          const: NSGA-II
+          default: NSGA-II
+        library:
+          type: string
+        population_size:
+          type: integer
+        generations:
+          type: integer
+        seed:
+          type: integer
+        evaluations:
+          type: integer
+        duration_ms:
+          type: integer
+        status:
+          type: string
+          enum:
+          - completed
+          - no_feasible_solution
+        solution_count:
+          type: integer
+        layout:
+          $ref: '#/components/schemas/HomeLayout'
+        solutions:
+          items:
+            $ref: '#/components/schemas/Solution'
+          type: array
+      type: object
+      required:
+      - id
+      - home_id
+      - created_at
+      - created_by
+      - layout_version
+      - library
+      - population_size
+      - generations
+      - seed
+      - evaluations
+      - duration_ms
+      - status
+      - solution_count
+      - layout
+      - solutions
+    RunSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+        home_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          anyOf:
+          - type: string
+            format: uuid
+          - type: 'null'
+        layout_version:
+          type: integer
+        algorithm:
+          type: string
+          const: NSGA-II
+          default: NSGA-II
+        library:
+          type: string
+        population_size:
+          type: integer
+        generations:
+          type: integer
+        seed:
+          type: integer
+        evaluations:
+          type: integer
+        duration_ms:
+          type: integer
+        status:
+          type: string
+          enum:
+          - completed
+          - no_feasible_solution
+        solution_count:
+          type: integer
+      type: object
+      required:
+      - id
+      - home_id
+      - created_at
+      - created_by
+      - layout_version
+      - library
+      - population_size
+      - generations
+      - seed
+      - evaluations
+      - duration_ms
+      - status
+      - solution_count
+    SaveLayoutRequest:
+      properties:
+        version:
+          type: integer
+          minimum: 0.0
+          description: Versão lida antes da edição; use 0 para salvar pela primeira vez.
+        layout:
+          $ref: '#/components/schemas/HomeLayout'
+      additionalProperties: false
+      type: object
+      required:
+      - version
+      - layout
+    SensorPlacement:
+      properties:
+        candidate_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        sensor_type_id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+      additionalProperties: false
+      type: object
+      required:
+      - candidate_id
+      - sensor_type_id
+    SensorType:
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,47}$
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+        unit_cost:
+          anyOf:
+          - type: number
+            maximum: 10000000.0
+            minimum: 0.0
+          - type: 'null'
+          description: Custo de aquisição por unidade. Obrigatório para avaliar ou otimizar.
+        installation_cost:
+          anyOf:
+          - type: number
+            maximum: 10000000.0
+            minimum: 0.0
+          - type: 'null'
+          description: Custo de instalação por unidade. Obrigatório para avaliar ou otimizar.
+        stock:
+          type: integer
+          maximum: 1000.0
+          minimum: 0.0
+          description: Quantidade disponível.
+        range:
+          type: number
+          maximum: 50.0
+          exclusiveMinimum: 0.0
+          description: Alcance, em unidades da maquete.
+        field_of_view_deg:
+          type: number
+          maximum: 360.0
+          exclusiveMinimum: 0.0
+          description: Abertura horizontal do campo de detecção; 360 = omnidirecional.
+        reliability:
+          type: number
+          maximum: 1.0
+          exclusiveMinimum: 0.0
+          description: Probabilidade de detecção de um ponto dentro do alcance e do campo.
+          default: 1.0
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - name
+      - stock
+      - range
+      - field_of_view_deg
+    Solution:
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+        sensors:
+          items:
+            $ref: '#/components/schemas/SensorPlacement'
+          type: array
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+      type: object
+      required:
+      - id
+      - index
+      - sensors
+      - metrics
+    SolutionDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+        index:
+          type: integer
+        sensors:
+          items:
+            $ref: '#/components/schemas/SensorPlacement'
+          type: array
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        run_id:
+          type: string
+          format: uuid
+        points:
+          items:
+            $ref: '#/components/schemas/PointCoverage'
+          type: array
+      type: object
+      required:
+      - id
+      - index
+      - sensors
+      - metrics
+      - run_id
+      - points
+    Violation:
+      properties:
+        code:
+          type: string
+          enum:
+          - BUDGET_EXCEEDED
+          - STOCK_EXCEEDED
+        detail:
+          type: string
+      type: object
+      required:
+      - code
+      - detail
     Problem:
       type: object
       required: [type, title, status, detail, instance, code, traceId]

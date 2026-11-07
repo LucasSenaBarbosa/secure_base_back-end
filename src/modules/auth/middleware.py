@@ -45,3 +45,23 @@ async def require_home_admin(
 
 
 HomeAdminUser = Annotated[UserProfile, Depends(require_home_admin)]
+
+
+async def require_home_member(
+    home_id: UUID,
+    user: Annotated[UserProfile, Depends(get_current_user)],
+    repository: Repository,
+) -> UserProfile:
+    if await repository.get_home(home_id) is None:
+        raise Problem(404, "HOME_NOT_FOUND", "Não encontrada", "A residência não existe.")
+    if user.role != Role.MASTER and not await repository.is_home_member(home_id, user.id):
+        raise Problem(
+            403,
+            "FORBIDDEN",
+            "Acesso negado",
+            "Esta operação exige participação nesta residência.",
+        )
+    return user
+
+
+HomeMemberUser = Annotated[UserProfile, Depends(require_home_member)]

@@ -36,10 +36,16 @@
 - Erros HTTP usam `application/problem+json` sem detalhes internos do provedor.
 - CORS é limitado às origens configuradas e o corpo de criação de usuário não
   aceita papel.
+- A otimização NSGA-II roda no processo da API com limites de entrada
+  (população ≤ 200, gerações ≤ 300, até 1000 genes, 300 pontos críticos),
+  timeout de 60 s e no máximo duas execuções simultâneas por processo
+  (`503 OPTIMIZATION_BUSY`). Só primary ou master da residência pode executar;
+  membros apenas leem e avaliam configurações.
 
 ## Revisões operacionais pendentes
 
-Antes da produção, configure rate limiting no gateway, segredos
+Antes da produção, configure rate limiting no gateway (em especial para
+`POST /api/v1/homes/{home_id}/optimization-runs`, que consome CPU), segredos
 fortes/rotacionáveis e HTTPS; teste autorização usando contas separadas. Se o
 envio de e-mail for implementado (por exemplo, para recuperação de senha),
 configure SMTP autenticado com TLS. Não promova um administrador sem verificar

@@ -294,6 +294,15 @@ Prefixo de API: `/api/v1`. O contrato executável também está disponível em
 | POST | `/api/v1/homes/{home_id}/users` | `primary` da casa ou `master` | `email`, `Idempotency-Key` | `201`; associa uma conta já cadastrada; replay por 24 h |
 | DELETE | `/api/v1/homes/{home_id}/users/{user_id}` | `primary` da casa ou `master` | UUIDs | `204`; remove somente o vínculo, não pode remover o `primary` proprietário |
 | PATCH | `/api/v1/homes/{home_id}/primary` | `master` | `user_id` | `200`; transfere a titularidade para membro existente |
+| GET | `/api/v1/homes/{home_id}/layout` | Membro da residência ou `master` | — | `200`; layout salvo ou layout-base (`source: template`) |
+| PUT | `/api/v1/homes/{home_id}/layout` | Primary da residência ou `master` | `version`, `layout` | `200`; `409 LAYOUT_VERSION_CONFLICT` se a versão divergir |
+| POST | `/api/v1/homes/{home_id}/configurations/evaluate` | Membro ou `master` | `sensors` | `200`; cobertura, custo, vulnerabilidade e violações |
+| POST | `/api/v1/homes/{home_id}/optimization-runs` | Primary ou `master` | `population_size`, `generations`, `seed`, `Idempotency-Key` | `201`; execução NSGA-II com soluções viáveis não dominadas |
+| GET | `/api/v1/homes/{home_id}/optimization-runs[/{run_id}]` | Membro ou `master` | `limit`, `offset` | Lista ou detalhe com fronteira de Pareto |
+| GET | `/api/v1/homes/{home_id}/optimization-runs/{run_id}/solutions/{solution_id}` | Membro ou `master` | — | Solução com detecção por ponto crítico |
+| POST | `/api/v1/homes/{home_id}/optimization-runs/{run_id}/compare` | Membro ou `master` | `manual_configuration_id` ou `sensors` | `200`; diferenças e dominância |
+| GET, POST | `/api/v1/homes/{home_id}/manual-configurations` | Leitura: membro; gravação: primary ou `master` | `name`, `sensors`, `Idempotency-Key` | Configurações manuais com métricas recalculadas |
+| DELETE | `/api/v1/homes/{home_id}/manual-configurations/{configuration_id}` | Primary ou `master` | — | `204` |
 | DELETE | `/api/v1/users/{user_id}` | `master` | UUID | `204`; impede autoexclusão, exclusão de master ou de primary que ainda possui casa |
 
 O cadastro armazena hash scrypt da senha na tabela `securebase_users`; a conta

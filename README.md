@@ -22,6 +22,10 @@ usuários do SecureBase.
 - `supabase/migrations/`: alterações versionadas do banco.
 - `tests/`: testes automatizados da API.
 
+O laboratório de otimização de sensores (NSGA-II com pymoo) está descrito em
+[`docs/optimization.md`](./docs/optimization.md), com o modelo matemático,
+os endpoints, como testar e as limitações.
+
 As decisões de arquitetura estão em [`docs/adr/`](./docs/adr/). Os controles
 de segurança e limites conhecidos estão em [`SECURITY.md`](./SECURITY.md).
 
@@ -55,7 +59,9 @@ $env:PYTHONPATH = "src"
 .\.venv\Scripts\python.exe -m main
 ```
 
-A documentação interativa fica em `http://localhost:8000/docs`. `GET /` e
+A documentação interativa fica em `http://localhost:8000/docs`; o topo da
+página traz o passo a passo para obter um JWT e usá-lo no botão **Authorize**
+(texto em [`src/app/openapi_docs.py`](./src/app/openapi_docs.py)). `GET /` e
 `GET /health/live` são endpoints públicos; `GET /health/ready` verifica também
 as dependências do banco.
 

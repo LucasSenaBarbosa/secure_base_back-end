@@ -1384,3 +1384,89 @@ def test_hosted_settings_require_tls() -> None:
             jwt_secret_key="test-signing-secret-at-least-32-bytes",
             cors_origins=["https://app.example.com"],
         )
+
+
+def test_openapi_documents_swagger_jwt_authorization() -> None:
+    schema = client.get("/openapi.json").json()
+
+    assert schema["components"]["securitySchemes"]["bearerAuth"] == {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": schema["components"]["securitySchemes"]["bearerAuth"]["description"],
+    }
+    assert "sem o prefixo `Bearer`" in (
+        schema["components"]["securitySchemes"]["bearerAuth"]["description"]
+    )
+    assert {"bearerAuth": []} in schema["paths"]["/api/v1/auth/me"]["get"]["security"]
+    assert "security" not in schema["paths"]["/api/v1/auth/login"]["post"]
+    description = schema["info"]["description"]
+    for documented in (
+        "POST /api/v1/auth/login",
+        "Authorize",
+        "GET /api/v1/auth/me",
+        "AUTHENTICATION_REQUIRED",
+        "INVALID_ACCESS_TOKEN",
+        "POST /api/v1/auth/refresh",
+    ):
+        assert documented in description
+
+
+def test_swagger_flow_login_token_authorizes_protected_route() -> None:
+    gateway = FakeGateway()
+    app.dependency_overrides[get_repository] = lambda: gateway
+    try:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": _EMAIL, "password": _PASSWORD},
+        )
+        token = login.json()["access_token"]
+        authorized = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        duplicated_prefix = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer Bearer {token}"},
+        )
+        missing = client.get("/api/v1/auth/me")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert login.status_code == 200
+    assert authorized.status_code == 200
+    assert authorized.json()["email"] == _EMAIL
+    assert duplicated_prefix.status_code == 401
+    assert duplicated_prefix.json()["code"] == "INVALID_ACCESS_TOKEN"
+    assert missing.status_code == 401
+    assert missing.json()["code"] == "AUTHENTICATION_REQUIRED"
+    assert missing.headers["content-type"] == "application/problem+json"
+
+
+def test_expired_access_token_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    import modules.auth.security as security
+
+    gateway = FakeGateway()
+    session_id = UUID("e0e0e0e0-e0e0-40e0-80e0-e0e0e0e0e0e0")
+    gateway.refresh_sessions["active-test-token"] = {
+        "user_id": _USER_ID,
+        "family_id": session_id,
+        "auth_version": 0,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=1),
+        "revoked": False,
+    }
+    token, expires_in = issue_access_token(settings(), _USER_ID, 0, session_id)
+    real_time = security.time.time
+    monkeypatch.setattr(security.time, "time", lambda: real_time() + expires_in + 1)
+    app.dependency_overrides[get_repository] = lambda: gateway
+    try:
+        response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "INVALID_ACCESS_TOKEN"
+    assert response.json()["detail"] == "A sessão é inválida ou expirou."

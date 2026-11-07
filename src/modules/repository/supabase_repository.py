@@ -13,6 +13,15 @@ _ACCOUNT_FIELDS = (
 )
 
 
+_RUN_SUMMARY_FIELDS = (
+    "id,home_id,created_at,created_by,layout_version,library,population_size,"
+    "generations,seed,evaluations,duration_ms,status,solution_count"
+)
+_SOLUTION_FIELDS = "id,run_id,solution_index,sensors,coverage,cost,vulnerability,sensors_by_type"
+_MANUAL_FIELDS = "id,home_id,name,sensors,created_by,created_at"
+_LAYOUT_FIELDS = "home_id,layout,version,updated_at"
+
+
 class RotatedRefreshSession(TypedDict):
     user_id: UUID
     family_id: UUID
@@ -452,6 +461,196 @@ class SupabaseRepository:
         )
         return bool(rows)
 
+    async def get_home_layout(self, home_id: UUID) -> dict[str, Any] | None:
+        rows = await self._request(
+            "GET",
+            table="securebase_home_layouts",
+            params={"home_id": f"eq.{home_id}", "select": _LAYOUT_FIELDS, "limit": "1"},
+        )
+        return rows[0] if rows else None
+
+    async def create_home_layout(
+        self,
+        home_id: UUID,
+        layout: dict[str, Any],
+        actor_id: UUID,
+    ) -> dict[str, Any]:
+        rows = await self._request(
+            "POST",
+            table="securebase_home_layouts",
+            params={"select": _LAYOUT_FIELDS},
+            payload={"home_id": str(home_id), "layout": layout, "updated_by": str(actor_id)},
+            prefer="return=representation",
+            conflict=_layout_conflict(),
+        )
+        if not rows:
+            raise _unconfirmed("o layout")
+        return rows[0]
+
+    async def update_home_layout(
+        self,
+        home_id: UUID,
+        layout: dict[str, Any],
+        expected_version: int,
+        actor_id: UUID,
+    ) -> dict[str, Any] | None:
+        rows = await self._request(
+            "PATCH",
+            table="securebase_home_layouts",
+            params={
+                "home_id": f"eq.{home_id}",
+                "version": f"eq.{expected_version}",
+                "select": _LAYOUT_FIELDS,
+            },
+            payload={
+                "layout": layout,
+                "version": expected_version + 1,
+                "updated_by": str(actor_id),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+            prefer="return=representation",
+        )
+        return rows[0] if rows else None
+
+    async def create_optimization_run(
+        self,
+        run: dict[str, Any],
+        solutions: list[dict[str, Any]],
+    ) -> None:
+        await self._rpc(
+            "securebase_create_optimization_run",
+            {"p_run": run, "p_solutions": solutions},
+        )
+
+    async def list_optimization_runs(
+        self,
+        home_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET",
+            table="securebase_optimization_runs",
+            params={
+                "home_id": f"eq.{home_id}",
+                "select": _RUN_SUMMARY_FIELDS,
+                "order": "created_at.desc",
+                "limit": str(limit),
+                "offset": str(offset),
+            },
+        )
+
+    async def get_optimization_run(
+        self,
+        home_id: UUID,
+        run_id: UUID,
+    ) -> dict[str, Any] | None:
+        rows = await self._request(
+            "GET",
+            table="securebase_optimization_runs",
+            params={
+                "id": f"eq.{run_id}",
+                "home_id": f"eq.{home_id}",
+                "select": f"{_RUN_SUMMARY_FIELDS},layout_snapshot",
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    async def list_optimization_solutions(self, run_id: UUID) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET",
+            table="securebase_optimization_solutions",
+            params={
+                "run_id": f"eq.{run_id}",
+                "select": _SOLUTION_FIELDS,
+                "order": "solution_index.asc",
+            },
+        )
+
+    async def get_optimization_solution(
+        self,
+        run_id: UUID,
+        solution_id: UUID,
+    ) -> dict[str, Any] | None:
+        rows = await self._request(
+            "GET",
+            table="securebase_optimization_solutions",
+            params={
+                "id": f"eq.{solution_id}",
+                "run_id": f"eq.{run_id}",
+                "select": _SOLUTION_FIELDS,
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    async def create_manual_configuration(
+        self,
+        home_id: UUID,
+        name: str,
+        sensors: list[dict[str, Any]],
+        actor_id: UUID,
+    ) -> dict[str, Any]:
+        rows = await self._request(
+            "POST",
+            table="securebase_manual_configurations",
+            params={"select": _MANUAL_FIELDS},
+            payload={
+                "home_id": str(home_id),
+                "name": name,
+                "sensors": sensors,
+                "created_by": str(actor_id),
+            },
+            prefer="return=representation",
+        )
+        if not rows:
+            raise _unconfirmed("a configuração manual")
+        return rows[0]
+
+    async def list_manual_configurations(self, home_id: UUID) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET",
+            table="securebase_manual_configurations",
+            params={
+                "home_id": f"eq.{home_id}",
+                "select": _MANUAL_FIELDS,
+                "order": "created_at.desc",
+                "limit": "100",
+            },
+        )
+
+    async def get_manual_configuration(
+        self,
+        home_id: UUID,
+        configuration_id: UUID,
+    ) -> dict[str, Any] | None:
+        rows = await self._request(
+            "GET",
+            table="securebase_manual_configurations",
+            params={
+                "id": f"eq.{configuration_id}",
+                "home_id": f"eq.{home_id}",
+                "select": _MANUAL_FIELDS,
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
+
+    async def delete_manual_configuration(
+        self,
+        home_id: UUID,
+        configuration_id: UUID,
+    ) -> bool:
+        rows = await self._request(
+            "DELETE",
+            table="securebase_manual_configurations",
+            params={"id": f"eq.{configuration_id}", "home_id": f"eq.{home_id}"},
+            prefer="return=representation",
+        )
+        return bool(rows)
+
     async def is_ready(self) -> bool:
         try:
             async with self._client() as client:
@@ -461,6 +660,10 @@ class SupabaseRepository:
                     ("securebase_home_members", "home_id"),
                     ("securebase_refresh_sessions", "id"),
                     ("securebase_idempotency_keys", "key_hash"),
+                    ("securebase_home_layouts", "home_id"),
+                    ("securebase_optimization_runs", "id"),
+                    ("securebase_optimization_solutions", "id"),
+                    ("securebase_manual_configurations", "id"),
                 ):
                     response = await client.get(
                         f"{self._base_url}/rest/v1/{table}",
@@ -517,6 +720,7 @@ class SupabaseRepository:
         prefer: str | None = None,
         conflict_is_account: bool = False,
         conflict_is_membership: bool = False,
+        conflict: Problem | None = None,
     ) -> list[dict[str, Any]]:
         headers = self._admin_headers()
         if prefer:
@@ -552,6 +756,8 @@ class SupabaseRepository:
                 "Conflito",
                 "Este usuário já pertence à residência.",
             )
+        if conflict is not None and response.status_code == 409:
+            raise conflict
         if response.is_error:
             raise Problem(
                 503,
@@ -599,3 +805,21 @@ class SupabaseRepository:
 
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+def _layout_conflict() -> Problem:
+    return Problem(
+        409,
+        "LAYOUT_VERSION_CONFLICT",
+        "Conflito de versão",
+        "O layout foi alterado por outra pessoa. Recarregue e aplique suas mudanças novamente.",
+    )
+
+
+def _unconfirmed(subject: str) -> Problem:
+    return Problem(
+        503,
+        "INVALID_DATABASE_RESPONSE",
+        "Serviço temporariamente indisponível",
+        f"O banco não confirmou a gravação de {subject}.",
+    )

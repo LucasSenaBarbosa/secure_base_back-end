@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.openapi_docs import API_DESCRIPTION
 from config.settings import get_settings
 from middleware import add_request_id
 from modules.routes.routes import api_router
@@ -22,13 +23,13 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="SecureBase API",
         version="0.1.0",
-        description="API Python do SecureBase com autenticação própria e PostgreSQL.",
+        description=API_DESCRIPTION,
     )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=[
             "Authorization",
             "Content-Type",
