@@ -94,6 +94,12 @@ A CLI verificada durante esta revisão era `2.122.0`. O workflow de CI usa a
 ação `supabase/setup-cli` com `v2.stable`; os desenvolvedores devem conferir a
 versão realmente instalada em seu terminal com `supabase --version`.
 
+O `package.json` fixa a mesma versão `2.122.0`. Sem a CLI global, rode
+`npm ci` na raiz do backend e use `npx supabase` no lugar de `supabase` nos
+comandos deste manual. A CLI v3 recusa o `supabase/config.toml` atual
+(`[inbucket] ... is no longer supported`); não atualize a versão sem migrar esse
+arquivo e conferir o CI.
+
 ## 4. Configuração Supabase do projeto
 
 A configuração local está em [`supabase/config.toml`](./supabase/config.toml).
@@ -300,6 +306,8 @@ O histórico versionado e a ordem atual são:
 4. `20261025000400_households.sql`
 5. `20261025000500_auth_sessions_and_idempotency.sql`
 6. `20261101000100_qualify_refresh_session_family_id.sql`
+7. `20261106000100_sensor_optimization.sql`
+8. `20261108000100_link_simulations.sql`
 
 As migrations são a fonte versionada da estrutura do banco. Revise cada
 alteração SQL, impacto de compatibilidade, grants, RLS, índices, funções e

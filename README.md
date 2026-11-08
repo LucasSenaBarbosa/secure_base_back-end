@@ -26,6 +26,10 @@ O laboratório de otimização de sensores (NSGA-II com pymoo) está descrito em
 [`docs/optimization.md`](./docs/optimization.md), com o modelo matemático,
 os endpoints, como testar e as limitações.
 
+O laboratório de rede (`/homes/{home_id}/link-simulations`) simula o caminho de
+um alerta sob falhas e ataques, sem gerar sinal ou tráfego real; consulte a
+[ADR 0010](./docs/adr/0010-laboratorio-de-rede-na-api.md).
+
 As decisões de arquitetura estão em [`docs/adr/`](./docs/adr/). Os controles
 de segurança e limites conhecidos estão em [`SECURITY.md`](./SECURITY.md).
 

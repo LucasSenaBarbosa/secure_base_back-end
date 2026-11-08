@@ -1031,6 +1031,245 @@ paths:
           $ref: '#/components/responses/Problem'
         '422':
           $ref: '#/components/responses/Problem'
+  /api/v1/homes/{home_id}/link-simulations/catalog:
+    get:
+      tags:
+      - link-simulations
+      summary: Listar cenários e defesas
+      description: Catálogo do laboratório de rede, com as aulas relacionadas a cada item.
+      operationId: get_catalog_api_v1_homes__home_id__link_simulations_catalog_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Home Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkCatalog'
+        '403':
+          description: Sem participação na residência
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Residência não encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/homes/{home_id}/link-simulations:
+    post:
+      tags:
+      - link-simulations
+      summary: Simular o envio de um alerta
+      description: Simula o caminho do alerta sob o cenário escolhido e grava o resultado no histórico.
+        A resposta traz também as métricas do mesmo cenário sem defesas. Nenhum sinal ou tráfego real é
+        gerado.
+      operationId: create_simulation_api_v1_homes__home_id__link_simulations_post
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Home Id
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          minLength: 16
+          maxLength: 200
+          title: Idempotency-Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkSimulationRequest'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkSimulationDetail'
+        '403':
+          description: Sem participação na residência
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Residência não encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Conflito de idempotência
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      tags:
+      - link-simulations
+      summary: Listar simulações de rede
+      operationId: list_simulations_api_v1_homes__home_id__link_simulations_get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Home Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 100
+          minimum: 1
+          default: 20
+          title: Limit
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 10000
+          minimum: 0
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LinkSimulationSummary'
+                title: Response List Simulations Api V1 Homes  Home Id  Link Simulations Get
+        '403':
+          description: Sem participação na residência
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Residência não encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/homes/{home_id}/link-simulations/{simulation_id}:
+    get:
+      tags:
+      - link-simulations
+      summary: Detalhar uma simulação de rede
+      operationId: get_simulation_api_v1_homes__home_id__link_simulations__simulation_id__get
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Home Id
+      - name: simulation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          title: Simulation Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkSimulationDetail'
+        '403':
+          description: Sem participação na residência
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: Residência não encontrada
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          description: Erro no formato RFC 9457
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   parameters:
     IdempotencyKey:
@@ -1982,6 +2221,569 @@ components:
         instance: /api/v1/auth/me
         code: AUTHENTICATION_REQUIRED
         traceId: 00000000-0000-4000-8000-000000000000
+    DefenseInfo:
+      properties:
+        id:
+          type: string
+          enum:
+          - heartbeat
+          - local_siren
+          - sdwan_failover
+          - block_2g
+          - encrypted_push
+          title: Id
+        label:
+          type: string
+          title: Label
+        description:
+          type: string
+          title: Description
+        lessons:
+          items:
+            type: string
+          type: array
+          title: Lessons
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      - description
+      - lessons
+      title: DefenseInfo
+    HopReport:
+      properties:
+        id:
+          type: string
+          enum:
+          - wifi
+          - wan
+          - backup_wan
+          - api
+          - mobile
+          - rogue_cell
+          title: Id
+        label:
+          type: string
+          title: Label
+        latency_ms:
+          type: number
+          title: Latency Ms
+        loss:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Loss
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+          - down
+          - rogue
+          title: Status
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      - latency_ms
+      - loss
+      - status
+      title: HopReport
+    LinkCatalog:
+      properties:
+        model_version:
+          type: string
+          title: Model Version
+        notice:
+          type: string
+          title: Notice
+          description: Aviso sobre o caráter didático dos valores do modelo.
+        scenarios:
+          items:
+            $ref: '#/components/schemas/ScenarioInfo'
+          type: array
+          title: Scenarios
+        defenses:
+          items:
+            $ref: '#/components/schemas/DefenseInfo'
+          type: array
+          title: Defenses
+      additionalProperties: false
+      type: object
+      required:
+      - model_version
+      - notice
+      - scenarios
+      - defenses
+      title: LinkCatalog
+    LinkMetrics:
+      properties:
+        delivery_rate:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Delivery Rate
+          description: Fração de alertas que chegou.
+        aware_rate:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Aware Rate
+          description: Fração em que o morador recebeu o alerta ou o aviso de perda de contato.
+        exposure_rate:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Exposure Rate
+          description: Fração em que o conteúdo do alerta ficou legível para o atacante.
+        packet_loss:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Packet Loss
+          description: Perda por tentativa de envio.
+        latency_p50_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Latency P50 Ms
+        latency_p95_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Latency P95 Ms
+        jitter_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Jitter Ms
+        aware_p50_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Aware P50 Ms
+        local_alarm:
+          type: boolean
+          title: Local Alarm
+        verdict:
+          type: string
+          enum:
+          - delivered
+          - aware
+          - degraded
+          - local_only
+          - silent
+          title: Verdict
+      additionalProperties: false
+      type: object
+      required:
+      - delivery_rate
+      - aware_rate
+      - exposure_rate
+      - packet_loss
+      - latency_p50_ms
+      - latency_p95_ms
+      - jitter_ms
+      - aware_p50_ms
+      - local_alarm
+      - verdict
+      title: LinkMetrics
+    CellResult:
+      properties:
+        id:
+          type: string
+          enum:
+          - real
+          - fake
+          title: Id
+        label:
+          type: string
+          title: Label
+        generation:
+          type: string
+          enum:
+          - 2G
+          - 3G
+          - 4G
+          - 5G
+          title: Generation
+        blocked:
+          type: boolean
+          title: Blocked
+          description: O celular recusou esta antena.
+        network_authenticated:
+          type: boolean
+          title: Network Authenticated
+          description: O celular exige que a rede prove quem é.
+        identity_protected:
+          type: boolean
+          title: Identity Protected
+        content_protected:
+          type: boolean
+          title: Content Protected
+        delivery_rate:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Delivery Rate
+        exposure_rate:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Exposure Rate
+        latency_p50_ms:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Latency P50 Ms
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      - generation
+      - blocked
+      - network_authenticated
+      - identity_protected
+      - content_protected
+      - delivery_rate
+      - exposure_rate
+      - latency_p50_ms
+      title: CellResult
+    LinkSimulationDetail:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        home_id:
+          type: string
+          format: uuid
+          title: Home Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        scenario:
+          type: string
+          enum:
+          - baseline
+          - jamming
+          - wan_failure
+          - fake_base_station
+          title: Scenario
+        intensity:
+          type: number
+          title: Intensity
+        defenses:
+          items:
+            type: string
+            enum:
+            - heartbeat
+            - local_siren
+            - sdwan_failover
+            - block_2g
+            - encrypted_push
+          type: array
+          title: Defenses
+        trials:
+          type: integer
+          title: Trials
+        seed:
+          type: integer
+          title: Seed
+        model_version:
+          type: string
+          title: Model Version
+        verdict:
+          type: string
+          enum:
+          - delivered
+          - aware
+          - degraded
+          - local_only
+          - silent
+          title: Verdict
+        delivery_rate:
+          type: number
+          title: Delivery Rate
+        metrics:
+          $ref: '#/components/schemas/LinkMetrics'
+        without_defenses:
+          $ref: '#/components/schemas/LinkMetrics'
+          description: Mesmo cenário e mesma semente, sem nenhuma defesa ativa.
+        hops:
+          items:
+            $ref: '#/components/schemas/HopReport'
+          type: array
+          title: Hops
+        timeline:
+          items:
+            $ref: '#/components/schemas/TimelineEvent'
+          type: array
+          title: Timeline
+          description: Passo a passo do desfecho mais frequente entre as tentativas.
+        cells:
+          items:
+            $ref: '#/components/schemas/CellResult'
+          type: array
+          title: Cells
+          description: Resultado em cada antena; preenchido só no cenário de antena falsa.
+        fake_generation:
+          type: string
+          enum:
+          - 2G
+          - 3G
+          - 4G
+          - 5G
+          title: Fake Generation
+          default: 2G
+        generations:
+          items:
+            $ref: '#/components/schemas/CellResult'
+          type: array
+          title: Generations
+          description: Antena falsa em cada geração; preenchido só nesse cenário.
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - home_id
+      - created_at
+      - scenario
+      - intensity
+      - defenses
+      - trials
+      - seed
+      - model_version
+      - verdict
+      - delivery_rate
+      - metrics
+      - without_defenses
+      - hops
+      - timeline
+      title: LinkSimulationDetail
+    LinkSimulationRequest:
+      properties:
+        scenario:
+          type: string
+          enum:
+          - baseline
+          - jamming
+          - wan_failure
+          - fake_base_station
+          title: Scenario
+        intensity:
+          type: number
+          maximum: 1.0
+          minimum: 0.0
+          title: Intensity
+          description: Força do ataque ou da falha; 0 não altera o enlace.
+          default: 1.0
+        defenses:
+          items:
+            type: string
+            enum:
+            - heartbeat
+            - local_siren
+            - sdwan_failover
+            - block_2g
+            - encrypted_push
+          type: array
+          maxItems: 5
+          title: Defenses
+        fake_generation:
+          type: string
+          enum:
+          - 2G
+          - 3G
+          - 4G
+          - 5G
+          title: Fake Generation
+          description: Geração usada pela antena falsa; só tem efeito nesse cenário.
+          default: 2G
+        trials:
+          type: integer
+          maximum: 2000.0
+          minimum: 50.0
+          title: Trials
+          description: Número de alertas simulados.
+          default: 500
+        seed:
+          anyOf:
+          - type: integer
+            exclusiveMaximum: 2147483648.0
+            minimum: 0.0
+          - type: 'null'
+          title: Seed
+          description: Semente; a mesma entrada com a mesma semente gera o mesmo resultado.
+      additionalProperties: false
+      type: object
+      required:
+      - scenario
+      title: LinkSimulationRequest
+    LinkSimulationSummary:
+      properties:
+        id:
+          type: string
+          format: uuid
+          title: Id
+        home_id:
+          type: string
+          format: uuid
+          title: Home Id
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        scenario:
+          type: string
+          enum:
+          - baseline
+          - jamming
+          - wan_failure
+          - fake_base_station
+          title: Scenario
+        intensity:
+          type: number
+          title: Intensity
+        defenses:
+          items:
+            type: string
+            enum:
+            - heartbeat
+            - local_siren
+            - sdwan_failover
+            - block_2g
+            - encrypted_push
+          type: array
+          title: Defenses
+        trials:
+          type: integer
+          title: Trials
+        seed:
+          type: integer
+          title: Seed
+        model_version:
+          type: string
+          title: Model Version
+        verdict:
+          type: string
+          enum:
+          - delivered
+          - aware
+          - degraded
+          - local_only
+          - silent
+          title: Verdict
+        delivery_rate:
+          type: number
+          title: Delivery Rate
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - home_id
+      - created_at
+      - scenario
+      - intensity
+      - defenses
+      - trials
+      - seed
+      - model_version
+      - verdict
+      - delivery_rate
+      title: LinkSimulationSummary
+    ScenarioInfo:
+      properties:
+        id:
+          type: string
+          enum:
+          - baseline
+          - jamming
+          - wan_failure
+          - fake_base_station
+          title: Id
+        label:
+          type: string
+          title: Label
+        description:
+          type: string
+          title: Description
+        lessons:
+          items:
+            type: string
+          type: array
+          title: Lessons
+        relevant_defenses:
+          items:
+            type: string
+            enum:
+            - heartbeat
+            - local_siren
+            - sdwan_failover
+            - block_2g
+            - encrypted_push
+          type: array
+          title: Relevant Defenses
+      additionalProperties: false
+      type: object
+      required:
+      - id
+      - label
+      - description
+      - lessons
+      - relevant_defenses
+      title: ScenarioInfo
+    TimelineEvent:
+      properties:
+        t_ms:
+          type: integer
+          minimum: 0.0
+          title: T Ms
+        kind:
+          type: string
+          enum:
+          - start
+          - hop
+          - loss
+          - retry
+          - failover
+          - downgrade
+          - downgrade_blocked
+          - identity_exposed
+          - auth_failed
+          - heartbeat_missed
+          - notice
+          - exposed
+          - delivered
+          - failed
+          - local_alarm
+          title: Kind
+        hop:
+          anyOf:
+          - type: string
+            enum:
+            - wifi
+            - wan
+            - backup_wan
+            - api
+            - mobile
+            - rogue_cell
+          - type: 'null'
+          title: Hop
+        message:
+          type: string
+          title: Message
+      additionalProperties: false
+      type: object
+      required:
+      - t_ms
+      - kind
+      - message
+      title: TimelineEvent
   responses:
     Problem:
       description: Erro no formato RFC 9457

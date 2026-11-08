@@ -19,6 +19,11 @@ _RUN_SUMMARY_FIELDS = (
 )
 _SOLUTION_FIELDS = "id,run_id,solution_index,sensors,coverage,cost,vulnerability,sensors_by_type"
 _MANUAL_FIELDS = "id,home_id,name,sensors,created_by,created_at"
+_LINK_SIMULATION_SUMMARY_FIELDS = (
+    "id,home_id,created_at,scenario,intensity,defenses,trials,seed,model_version,"
+    "verdict,delivery_rate"
+)
+_LINK_SIMULATION_DETAIL_FIELDS = f"{_LINK_SIMULATION_SUMMARY_FIELDS},result"
 _LAYOUT_FIELDS = "home_id,layout,version,updated_at"
 
 
@@ -650,6 +655,54 @@ class SupabaseRepository:
             prefer="return=representation",
         )
         return bool(rows)
+
+    async def create_link_simulation(self, simulation: dict[str, Any]) -> dict[str, Any]:
+        rows = await self._request(
+            "POST",
+            table="securebase_link_simulations",
+            params={"select": _LINK_SIMULATION_DETAIL_FIELDS},
+            payload=simulation,
+            prefer="return=representation",
+        )
+        if not rows:
+            raise _unconfirmed("a simulação de rede")
+        return rows[0]
+
+    async def list_link_simulations(
+        self,
+        home_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET",
+            table="securebase_link_simulations",
+            params={
+                "home_id": f"eq.{home_id}",
+                "select": _LINK_SIMULATION_SUMMARY_FIELDS,
+                "order": "created_at.desc",
+                "limit": str(limit),
+                "offset": str(offset),
+            },
+        )
+
+    async def get_link_simulation(
+        self,
+        home_id: UUID,
+        simulation_id: UUID,
+    ) -> dict[str, Any] | None:
+        rows = await self._request(
+            "GET",
+            table="securebase_link_simulations",
+            params={
+                "id": f"eq.{simulation_id}",
+                "home_id": f"eq.{home_id}",
+                "select": _LINK_SIMULATION_DETAIL_FIELDS,
+                "limit": "1",
+            },
+        )
+        return rows[0] if rows else None
 
     async def is_ready(self) -> bool:
         try:

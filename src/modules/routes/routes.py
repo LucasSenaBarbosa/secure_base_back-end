@@ -4,6 +4,7 @@ from config.settings import get_settings
 from modules.routes.auth_routes import router as auth_router
 from modules.routes.health_routes import router as health_router
 from modules.routes.homes_routes import router as homes_router
+from modules.routes.link_simulation_routes import router as link_simulation_router
 from modules.routes.optimization_routes import router as optimization_router
 from modules.routes.root_routes import router as root_router
 from modules.routes.users_routes import router as users_router
@@ -17,5 +18,6 @@ versioned_router = APIRouter(prefix=settings.api_prefix)
 versioned_router.include_router(auth_router)
 versioned_router.include_router(homes_router)
 versioned_router.include_router(optimization_router)
+versioned_router.include_router(link_simulation_router)
 versioned_router.include_router(users_router)
 api_router.include_router(versioned_router)
